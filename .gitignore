@@ -1,0 +1,59 @@
+# Python Virtual Environments
+env/
+venv/
+.venv/
+env.bak/
+venv.bak/
+
+# Python Cache & Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment Variables (CRITICAL: Never commit these!)
+.env
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+
+# OS Generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local temporary test scripts
+test_db.py
+view_data.py
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
