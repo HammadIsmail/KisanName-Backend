@@ -27,7 +27,7 @@ app = FastAPI(
 # CORS — allow frontend origins
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "https://kisannama.vercel.app",
+    "https://kisan-nama.vercel.app",
     os.getenv("FRONTEND_URL", ""),
 ]
 
