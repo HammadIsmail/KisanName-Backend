@@ -8,20 +8,11 @@ class SignupRequest(BaseModel):
     name: str
     phone: str
     password: str
-    role: str = "farmer"
-
     @field_validator("phone")
     @classmethod
     def validate_phone(cls, v: str) -> str:
         if not re.match(r"^03\d{9}$", v):
             raise ValueError("Phone number must be 11 digits starting with 03")
-        return v
-
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, v: str) -> str:
-        if v not in ("farmer", "admin"):
-            raise ValueError("Role must be 'farmer' or 'admin'")
         return v
 
     @field_validator("name")

@@ -13,6 +13,7 @@ from database import SessionLocal, init_db
 from models.crop import Crop, District
 from models.crop_area import CropArea, PriceHistory
 from models.user import User
+from models.seasonal_weather import SeasonalWeather
 from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -164,6 +165,43 @@ def seed():
                 )
                 db.add(ph)
             print(f"  ✓ PriceHistory: {d_name}/{c_name} (12 months)")
+
+        db.commit()
+
+        # ── Seasonal Weather (12 months per district) ──────────────────────
+        for d_name, province in DISTRICTS:
+            d = district_map.get(d_name)
+            if not d:
+                continue
+            
+            existing_count = (
+                db.query(SeasonalWeather)
+                .filter(SeasonalWeather.district_id == d.id)
+                .count()
+            )
+            if existing_count > 0:
+                continue
+
+            for month in range(1, 13):
+                # Fake data: hotter in summer (Jun-Aug), some rain in monsoon (Jul-Sep)
+                if 5 <= month <= 8:
+                    temp = random.uniform(30.0, 42.0)
+                else:
+                    temp = random.uniform(12.0, 28.0)
+                
+                if 7 <= month <= 9:
+                    rain = random.uniform(50.0, 200.0)
+                else:
+                    rain = random.uniform(0.0, 30.0)
+                
+                sw = SeasonalWeather(
+                    district_id=d.id,
+                    month=month,
+                    avg_temp_c=round(temp, 1),
+                    avg_rainfall_mm=round(rain, 1),
+                )
+                db.add(sw)
+            print(f"  ✓ SeasonalWeather: {d_name} (12 months)")
 
         db.commit()
         print("\n✅ Seed complete!")

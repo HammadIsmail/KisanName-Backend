@@ -5,61 +5,84 @@ All tools receive a SQLAlchemy session injected at crew runtime.
 from typing import Optional
 from crewai.tools import tool
 from sqlalchemy.orm import Session
-
+from sqlalchemy import func
 
 def make_tools(db: Session):
     """Factory — returns tool functions bound to the given DB session."""
 
-    @tool("get_crop_area")
-    def get_crop_area(district: str, crop: str, season: Optional[str] = None) -> dict:
+    @tool("get_crop_area_summary")
+    def get_crop_area_summary(district: str, crop: str) -> str:
         """
-        Fetches crop area data from the database for a given district, crop, and season.
-        Returns current area, previous year area, and basic metadata.
-        If season is not provided, returns the most recent entry.
+        Fetches crop area data from the database for a given district and crop.
+        Returns a text summary containing this season's area, last season's area, 
+        3-year average, and percentage change vs 3-year average.
         """
         from models.crop_area import CropArea
         from models.crop import Crop, District as DistrictModel
 
-        query = (
+        # Subquery to get the last 3 seasons of data
+        subq = (
             db.query(CropArea)
             .join(DistrictModel, CropArea.district_id == DistrictModel.id)
             .join(Crop, CropArea.crop_id == Crop.id)
             .filter(DistrictModel.name.ilike(f"%{district}%"))
             .filter(Crop.name.ilike(f"%{crop}%"))
+            .order_by(CropArea.created_at.desc())
+            .limit(3)
+            .subquery()
         )
-        if season:
-            query = query.filter(CropArea.season == season)
 
-        entry = query.order_by(CropArea.created_at.desc()).first()
+        avg_area = db.query(func.avg(subq.c.area_acres)).scalar()
 
-        if not entry:
-            return {
-                "found": False,
-                "district": district,
-                "crop": crop,
-                "message": f"No data found for {crop} in {district}",
-            }
+        # Get latest 2 to find this season and last season
+        recent_records = (
+            db.query(CropArea)
+            .join(DistrictModel, CropArea.district_id == DistrictModel.id)
+            .join(Crop, CropArea.crop_id == Crop.id)
+            .filter(DistrictModel.name.ilike(f"%{district}%"))
+            .filter(Crop.name.ilike(f"%{crop}%"))
+            .order_by(CropArea.created_at.desc())
+            .limit(2)
+            .all()
+        )
 
-        change_pct = round(
-            ((entry.area_acres - entry.prev_year_acres) / entry.prev_year_acres) * 100, 1
-        ) if entry.prev_year_acres else 0
+        if not recent_records:
+            return f"No crop area data found for {crop} in {district}."
 
-        return {
-            "found": True,
-            "district": entry.district.name,
-            "crop": entry.crop.name,
-            "season": entry.season,
-            "area_acres": entry.area_acres,
-            "prev_year_acres": entry.prev_year_acres,
-            "change_pct": change_pct,
-            "expected_yield": entry.expected_yield,
-        }
+        this_season_area = recent_records[0].area_acres
+        last_season_area = recent_records[1].area_acres if len(recent_records) > 1 else recent_records[0].prev_year_acres
+        avg_area = float(avg_area) if avg_area else float(this_season_area)
 
-    @tool("get_price_history")
-    def get_price_history(crop: str, district: str) -> dict:
+        change_pct = round(((this_season_area - avg_area) / avg_area) * 100, 1) if avg_area else 0
+
+        return (
+            f"Crop Area Summary for {crop} in {district}:\n"
+            f"- This season's area: {this_season_area} acres\n"
+            f"- Last season's area: {last_season_area} acres\n"
+            f"- 3-year average area: {avg_area:.1f} acres\n"
+            f"- Percentage change vs 3-year average: {change_pct}%"
+        )
+
+    @tool("assess_risk")
+    def assess_risk(change_pct: float) -> str:
         """
-        Fetches price history for a crop in a district (last 3 seasons of data).
-        Returns list of prices sorted by date descending, and trend (rising/stable/falling).
+        Assesses the risk level based on the percentage change versus the 3-year average.
+        Returns a text summary indicating HIGH, MEDIUM, or LOW risk.
+        """
+        if change_pct > 25:
+            level = "HIGH"
+        elif change_pct > 10:
+            level = "MEDIUM"
+        else:
+            level = "LOW"
+            
+        return f"Risk Level: {level} (based on {change_pct}% change vs 3-year average)"
+
+    @tool("get_market_trend_summary")
+    def get_market_trend_summary(crop: str, district: str) -> str:
+        """
+        Fetches price history for a crop in a district.
+        Returns a text summary of recent price, 3-season average, min/max range, and trend direction.
         """
         from models.crop_area import PriceHistory
         from models.crop import Crop, District as DistrictModel
@@ -76,36 +99,28 @@ def make_tools(db: Session):
         )
 
         if not records:
-            return {
-                "found": False,
-                "crop": crop,
-                "district": district,
-                "message": "No price history found.",
-            }
+            return f"No price history found for {crop} in {district}."
 
         prices = [r.price_pkr for r in records]
-        last_price = prices[0]
-        oldest_price = prices[-1]
+        recent_price = prices[0]
+        avg_price = sum(prices) / len(prices)
+        min_price = min(prices)
+        max_price = max(prices)
 
-        if oldest_price == 0:
-            trend = "stable"
+        change_vs_avg = ((recent_price - avg_price) / avg_price) * 100 if avg_price else 0
+        if change_vs_avg > 5:
+            trend = "RISING"
+        elif change_vs_avg < -5:
+            trend = "FALLING"
         else:
-            change = ((last_price - oldest_price) / oldest_price) * 100
-            if change > 5:
-                trend = "rising"
-            elif change < -5:
-                trend = "falling"
-            else:
-                trend = "stable"
+            trend = "STABLE"
 
-        return {
-            "found": True,
-            "crop": crop,
-            "district": district,
-            "last_price_pkr": last_price,
-            "prices": prices,
-            "trend": trend,
-            "change_pct": round(((last_price - oldest_price) / oldest_price) * 100, 1) if oldest_price else 0,
-        }
+        return (
+            f"Market Trend Summary for {crop} in {district}:\n"
+            f"- Recent price: {recent_price} PKR/maund\n"
+            f"- 3-season average price: {avg_price:.1f} PKR/maund\n"
+            f"- Price range (min/max): {min_price} - {max_price} PKR/maund\n"
+            f"- Trend direction: {trend}"
+        )
 
-    return get_crop_area, get_price_history
+    return get_crop_area_summary, assess_risk, get_market_trend_summary

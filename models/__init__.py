@@ -4,5 +4,6 @@ from .crop import Crop, District
 from .crop_area import CropArea, PriceHistory
 from .chat_session import ChatSession
 from .query_log import QueryLog
+from .seasonal_weather import SeasonalWeather
 
-__all__ = ["User", "Crop", "District", "CropArea", "PriceHistory", "ChatSession", "QueryLog"]
+__all__ = ["User", "Crop", "District", "CropArea", "PriceHistory", "ChatSession", "QueryLog", "SeasonalWeather"]
