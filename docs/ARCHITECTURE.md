@@ -17,11 +17,11 @@ KisanNama is a multi-agent AI system that helps Pakistani farmers make data-driv
 | Frontend | Next.js 16.2.9(latest) (App Router) | Farmer chat UI + Govt dashboard |
 | Backend | FastAPI (Python 3.11+) | API server, SSE streaming |
 | Agent framework | CrewAI | Multi-agent orchestration |
-| LLM | OpenAI API (gpt-4o) | Agent reasoning, Urdu generation, synthesis |
+| LLM | Fireworks AI (deepseek-v4-pro) | Agent reasoning, Urdu generation, synthesis |
 | Database | PostgreSQL | Structured crop + user data |
 | Weather | ~~Open-Meteo API~~ | ~~Removed~~ |
 | STT | Web Speech API (browser) | Urdu voice input (ur-PK) |
-| TTS | OpenAI TTS API (tts-1) | Urdu audio output (nova voice) |
+| TTS | edge-tts (Microsoft Neural Voices) | Urdu audio output (ur-PK-UzmaNeural) |
 | Auth | JWT (python-jose) | Farmer + govt employee sessions |
 | Hosting | Railway (backend) + Vercel (frontend) | Deployment |
 
@@ -81,7 +81,7 @@ KisanNama is a multi-agent AI system that helps Pakistani farmers make data-driv
         └────────────┴────────────┴──────────────┘
                               │
                               ▼
-                   OpenAI API — gpt-4o (synthesis)
+                   Fireworks AI — deepseek-v4-pro (synthesis)
                    Urdu recommendation
                    streamed back via SSE
 ```
@@ -103,7 +103,7 @@ kisannama/
 │   │   ├── orchestrator.py       # CrewAI Crew + Process.hierarchical
 │   │   └── tools.py              # @tool-decorated DB + API functions
 │   ├── services/
-│   │   ├── speech.py             # OpenAI TTS (tts-1, nova voice)
+│   │   ├── speech.py             # edge-tts (Microsoft Neural Voices)
 │   │   └── urdu_utils.py         # RTL text helpers
 │   ├── routers/
 │   │   ├── auth.py               # /auth/signup, /auth/login
@@ -237,14 +237,14 @@ CREATE TABLE query_log (
 
 ### Strategy Agent
 - **Input:** Risk Agent + Market Agent outputs
-- **Tools:** OpenAI API call (gpt-4o) with structured context
+- **Tools:** Fireworks API call (deepseek-v4-pro) with structured context
 - **Output:** 2–3 alternative crop suggestions with reasoning
 
 ### Orchestrator
 - Runs Data, Risk, Market, Strategy agents in parallel via `Process.hierarchical`
-- All agents use `gpt-4o` as their LLM via CrewAI's `LLM` wrapper
+- All agents use `deepseek-v4-pro` as their LLM via CrewAI's `LLM` wrapper
 - Merges results into a single context object
-- Makes final OpenAI streaming call (gpt-4o) to generate Urdu recommendation
+- Makes final Fireworks streaming call (deepseek-v4-pro) to generate Urdu recommendation
 - Streams response chunks via SSE
 
 ---
@@ -270,7 +270,7 @@ Farmer taps mic → VoiceInput.tsx starts SpeechRecognition (ur-PK)
 ### TTS (voice output)
 ```
 Recommendation arrives → SpeakButton appears → Farmer taps
-→ POST /tts with Urdu text → OpenAI TTS (tts-1) returns MP3
+→ POST /tts with Urdu text → edge-tts (Microsoft Neural Voices) returns MP3
 → Browser Audio API plays it → Fallback: browser SpeechSynthesis
 ```
 
@@ -298,7 +298,7 @@ data: {"type": "done"}
 
 ### Backend (.env)
 ```
-OPENAI_API_KEY=sk-...
+FIREWORKS_API_KEY=fw_...
 DATABASE_URL=postgresql://user:pass@host:5432/kisannama
 SECRET_KEY=your-jwt-secret-key
 ALGORITHM=HS256
@@ -319,7 +319,7 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 | Backend | Railway | Free tier, auto-deploy from GitHub |
 | Frontend | Vercel | Free tier, Next.js native |
 | Database | Railway PostgreSQL | Provisioned alongside backend |
-| GCP TTS | ~~Google Cloud~~ | ~~Replaced by OpenAI TTS~~ |
+| TTS | edge-tts | Free Microsoft Neural Voices |
 
 ---
 
@@ -327,11 +327,11 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 
 1. `POST /auth/signup` + `POST /auth/login` — auth working
 2. `POST /query` returning hardcoded Urdu string — proves connection
-3. Strategy Agent calling OpenAI gpt-4o — proves AI works
+3. Strategy Agent calling Fireworks AI deepseek-v4-pro — proves AI works
 4. Add Data, Risk, Market agents in parallel
 5. Seed DB with PBS potato/onion/wheat district data
 6. Wire SSE streaming to AgentLog.tsx in frontend
 7. Build govt dashboard (entries table + add form)
 8. Add voice input (VoiceInput.tsx — Web Speech API)
-9. Add TTS (SpeakButton.tsx — OpenAI TTS API)
+9. Add TTS (SpeakButton.tsx — edge-tts)
 10. Polish RecoCard UI and Urdu RTL styling

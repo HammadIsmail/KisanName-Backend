@@ -118,7 +118,7 @@ Authorization: Bearer <token>
 
 ### POST /query
 
-Accepts a farmer's Urdu question, runs all CrewAI agents (powered by gpt-4o), and streams back agent updates followed by the Urdu recommendation as Server-Sent Events.
+Accepts a farmer's Urdu question, runs all CrewAI agents (powered by deepseek-v4-pro via Fireworks AI), and streams back agent updates followed by the Urdu recommendation as Server-Sent Events.
 
 **Headers**
 ```
@@ -137,7 +137,7 @@ Accept: text/event-stream
 }
 ```
 
-> `district`, `crop`, and `land_acres` are extracted automatically by gpt-4o if not provided. Sending them explicitly speeds up processing.
+> `district`, `crop`, and `land_acres` are extracted automatically by deepseek-v4-pro if not provided. Sending them explicitly speeds up processing.
 
 **Response** — `Content-Type: text/event-stream`
 
@@ -196,7 +196,7 @@ data: {"type": "error", "message": "Authentication required."}
 
 ### POST /tts
 
-Converts Urdu text to MP3 audio using OpenAI TTS API.
+Converts Urdu text to MP3 audio using edge-tts (Microsoft Neural Voices).
 
 **Headers**
 ```
@@ -208,13 +208,13 @@ Content-Type: application/json
 ```json
 {
   "text": "ضلع ساہیوال میں اس وقت آلو کا رقبہ گزشتہ سال سے زیادہ ہے۔",
-  "voice": "nova",
+  "voice": "ur-PK-UzmaNeural",
   "model": "tts-1"
 }
 ```
 
-> `voice` is optional. Defaults to `nova`. Other options: `alloy`, `ash`, `coral`, `echo`, `fable`, `onyx`, `shimmer`.
-> `model` is optional. Defaults to `tts-1` (faster). Use `tts-1-hd` for higher quality.
+> `voice` is optional. Defaults to `ur-PK-UzmaNeural` (female). Another option is `ur-PK-AsadNeural` (male).
+> `model` is optional. Kept for API backwards compatibility, but ignored by the edge-tts backend.
 
 **Response 200**
 ```
@@ -532,7 +532,7 @@ No auth required. Used by Railway for uptime monitoring.
 | 409 | Conflict (duplicate entry, phone already registered) |
 | 422 | Validation error (missing required field, wrong type) |
 | 500 | Internal server error |
-| 503 | Upstream service unavailable (Google TTS, OpenAI API) |
+| 503 | Upstream service unavailable (Fireworks API, Microsoft TTS) |
 
 ---
 

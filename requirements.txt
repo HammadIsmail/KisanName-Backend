@@ -1,11 +1,14 @@
 fastapi
 uvicorn[standard]
 crewai
+litellm
+edge-tts
 openai
 sqlalchemy
 psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt==4.0.1
 httpx
 python-dotenv
 python-multipart

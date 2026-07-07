@@ -12,13 +12,13 @@ from sqlalchemy.orm import Session
 
 router = APIRouter(tags=["TTS"])
 
-VALID_MODELS = ("tts-1", "tts-1-hd")
+VALID_MODELS = ("tts-1", "tts-1-hd")  # kept for API compat — edge-tts ignores model
 
 
 class TTSRequest(BaseModel):
     text: str
-    voice: Optional[str] = DEFAULT_VOICE   # nova | alloy | ash | coral | echo | fable | onyx | shimmer
-    model: Optional[str] = "tts-1"         # tts-1 (fast) | tts-1-hd (higher quality)
+    voice: Optional[str] = DEFAULT_VOICE   # ur-PK-UzmaNeural (female) | ur-PK-AsadNeural (male)
+    model: Optional[str] = "tts-1"         # ignored — kept for frontend compatibility
 
 
 @router.post("/tts")
@@ -28,7 +28,7 @@ def tts(
     db: Session = Depends(get_db),
 ):
     """
-    Convert Urdu text to MP3 audio using OpenAI TTS.
+    Convert Urdu text to MP3 audio using Microsoft Neural TTS (edge-tts).
     Returns binary audio/mpeg.
     """
     if len(payload.text) > 4096:
