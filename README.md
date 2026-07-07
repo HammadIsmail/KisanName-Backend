@@ -4,7 +4,7 @@
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green?logo=fastapi)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-412991?logo=openai)
+![Fireworks AI](https://img.shields.io/badge/Fireworks_AI-DeepSeek_V4_Pro-FF4500?logo=fire)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-blue?logo=postgresql)
 
 
@@ -13,10 +13,10 @@
 ## ✨ Features
 
 - 🤖 **4-agent AI pipeline** — Specialized CrewAI agents analyze crop area, compute planting risk, assess market price trends, and suggest alternative crops before generating the final advice.
-- 🌐 **Bilingual responses (Urdu + English)** — Every query generates a full response in **both** languages simultaneously using two parallel GPT-4o streams. Both are stored in the database; the frontend switches between them with zero re-fetching.
+- 🌐 **Bilingual responses (Urdu + English)** — Every query generates a full response in **both** languages simultaneously using two parallel DeepSeek streams. Both are stored in the database; the frontend switches between them with zero re-fetching.
 - ⚡ **Real-time SSE streaming** — Responses are streamed token-by-token via Server-Sent Events. All events (`agent_update`, `token`, `done`) carry bilingual content.
 - 💬 **Session-based chat history** — Conversations are grouped into `ChatSession` records. Each session holds multiple `QueryLog` messages. Fully queryable via REST.
-- 🔊 **Text-to-Speech (TTS)** — OpenAI TTS endpoint converts Urdu/English text to MP3 audio (up to 4,096 characters).
+- 🔊 **Text-to-Speech (TTS)** — `edge-tts` (Microsoft Neural Voices) converts Urdu/English text to high-quality MP3 audio (up to 4,096 characters). Completely free and natively supports Urdu.
 - 🔐 **JWT authentication** — Phone number + password login with configurable token expiry.
 - 📊 **Admin dashboard API** — CRUD endpoints for managing districts, crops, area estimates, price histories, and user accounts.
 
@@ -47,7 +47,7 @@ backend/
 ├── routers/
 │   ├── query.py              # /query (SSE), /sessions, /sessions/:id/messages, /history
 │   ├── auth.py               # /login, /register
-│   ├── tts.py                # /tts (OpenAI speech synthesis → MP3)
+│   ├── tts.py                # /tts (edge-tts speech synthesis → MP3)
 │   ├── admin.py              # Admin CRUD for crop/district/user data
 │   └── health.py             # /health
 │
@@ -56,7 +56,7 @@ backend/
 │   └── tools.py              # DB-backed tools: get_crop_area, get_price_history
 │
 └── services/
-    └── speech.py             # OpenAI TTS wrapper (synthesize_urdu function)
+    └── speech.py             # edge-tts wrapper (synthesize_urdu_async function)
 ```
 
 ---
@@ -67,7 +67,7 @@ backend/
 
 - **Python** 3.9+
 - **PostgreSQL** database (local or hosted on [Neon](https://neon.tech/))
-- **OpenAI API Key** — GPT-4o access required; TTS access needed for voice playback
+- **Fireworks AI API Key** — For DeepSeek V4 Pro inference
 
 ---
 
@@ -87,7 +87,7 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```env
-OPENAI_API_KEY=sk-...your-key-here...
+FIREWORKS_API_KEY=fw_...your-key-here...
 DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 SECRET_KEY=any-long-random-string-here
 ALGORITHM=HS256
@@ -96,7 +96,7 @@ ACCESS_TOKEN_EXPIRE_DAYS=7
 
 | Variable | Description |
 |---|---|
-| `OPENAI_API_KEY` | Your OpenAI API key (GPT-4o + TTS) |
+| `FIREWORKS_API_KEY` | Your Fireworks AI API key (DeepSeek inference) |
 | `DATABASE_URL` | Full PostgreSQL connection string |
 | `SECRET_KEY` | Random secret for signing JWT tokens |
 | `ALGORITHM` | JWT algorithm — use `HS256` |
@@ -143,11 +143,11 @@ User query (text + optional district/crop/session_id)
 1. Data Agent      → Fetches crop area & previous year area for the district
 2. Risk Agent      → Computes % YoY change → low / medium / high risk label
 3. Market Agent    → Retrieves latest price trend & last recorded price
-4. Strategy Agent  → GPT-4o suggests 2-3 alternative crops (in both languages)
+4. Strategy Agent  → DeepSeek V4 suggests 2-3 alternative crops (in both languages)
         │
         ▼
-GPT-4o Stream → Urdu recommendation (tokens tagged lang="ur")
-GPT-4o Stream → English recommendation (tokens tagged lang="en")
+DeepSeek Stream → Urdu recommendation (tokens tagged lang="ur")
+DeepSeek Stream → English recommendation (tokens tagged lang="en")
         │
         ▼
 SSE "done" event → { risk_level, recommended_crop, district }
@@ -220,7 +220,7 @@ python migrate.py
 
 ## 🤝 Related Repository
 
-- **Frontend**: [KisanName-Frontend](https://github.com/HammadIsmail/KisanName-Frontend) — Next.js + TypeScript
+- **Frontend**: [KisanName-Frontend](https://github.com/HammadIsmail/KisanName-Frontend) — Next.js + TypeScript + Tailwind CSS
 
 ---
 
