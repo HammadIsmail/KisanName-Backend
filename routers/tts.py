@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from auth import get_current_user
 from database import get_db
 from models.user import User
-from services.speech import VALID_VOICES, DEFAULT_VOICE, synthesize_urdu
+from services.speech import VALID_VOICES, DEFAULT_VOICE, synthesize_urdu_async
 from sqlalchemy.orm import Session
 
 router = APIRouter(tags=["TTS"])
@@ -22,7 +22,7 @@ class TTSRequest(BaseModel):
 
 
 @router.post("/tts")
-def tts(
+async def tts(
     payload: TTSRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -38,14 +38,13 @@ def tts(
         )
 
     voice = payload.voice if payload.voice in VALID_VOICES else DEFAULT_VOICE
-    model = payload.model if payload.model in VALID_MODELS else "tts-1"
 
     try:
-        audio_bytes = synthesize_urdu(payload.text, voice=voice, model=model)
+        audio_bytes = await synthesize_urdu_async(payload.text, voice=voice)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="TTS service temporarily unavailable. Use browser fallback.",
+            detail=f"TTS synthesis failed: {e}",
         )
 
     return Response(

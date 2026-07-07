@@ -15,14 +15,27 @@ VALID_VOICES = ("ur-PK-UzmaNeural", "ur-PK-AsadNeural")
 DEFAULT_VOICE = "ur-PK-UzmaNeural"
 
 
-async def _synthesize_async(text: str, voice: str) -> bytes:
-    """Internal async helper — streams edge-tts output into bytes."""
+async def synthesize_urdu_async(text: str, voice: str = DEFAULT_VOICE) -> bytes:
+    """
+    Async version — call this directly from async FastAPI endpoints via await.
+    Convert text to MP3 audio using Microsoft Neural TTS (edge-tts).
+    Returns raw MP3 bytes.
+    """
+    if len(text) > 4096:
+        raise ValueError("Text too long. Maximum 4096 characters per request.")
+
+    if voice not in VALID_VOICES:
+        voice = DEFAULT_VOICE
+
     communicate = edge_tts.Communicate(text, voice)
     buf = io.BytesIO()
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             buf.write(chunk["data"])
-    return buf.getvalue()
+    audio = buf.getvalue()
+    if not audio:
+        raise RuntimeError("edge-tts returned empty audio")
+    return audio
 
 
 def synthesize_urdu(
@@ -31,26 +44,7 @@ def synthesize_urdu(
     model: str = "tts-1",   # kept for API compatibility — ignored by edge-tts
 ) -> bytes:
     """
-    Convert text to MP3 audio using Microsoft Neural TTS.
-    Returns raw MP3 bytes.
-
-    voice options: ur-PK-UzmaNeural (female) | ur-PK-AsadNeural (male)
+    Sync wrapper — kept for backward compatibility.
+    Prefer synthesize_urdu_async() in async contexts.
     """
-    if len(text) > 4096:
-        raise ValueError("Text too long. Maximum 4096 characters per request.")
-
-    if voice not in VALID_VOICES:
-        voice = DEFAULT_VOICE
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Running inside an existing event loop (FastAPI) — use a new thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _synthesize_async(text, voice))
-                return future.result()
-        else:
-            return loop.run_until_complete(_synthesize_async(text, voice))
-    except Exception as e:
-        raise RuntimeError(f"TTS synthesis failed: {e}") from e
+    return asyncio.run(synthesize_urdu_async(text, voice))

@@ -315,7 +315,7 @@ STRICT INSTRUCTION: Reply ONLY in English. Do not use any Urdu words.
             messages=[{"role": "user", "content": ur_prompt}],
             stream=True,
             temperature=0.5,
-            max_tokens=600,
+            max_tokens=2048,
         )
 
     ur_stream = await asyncio.to_thread(stream_ur)
@@ -331,7 +331,7 @@ STRICT INSTRUCTION: Reply ONLY in English. Do not use any Urdu words.
             messages=[{"role": "user", "content": en_prompt}],
             stream=True,
             temperature=0.5,
-            max_tokens=600,
+            max_tokens=2048,
         )
 
     en_stream = await asyncio.to_thread(stream_en)
