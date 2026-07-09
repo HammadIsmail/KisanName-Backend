@@ -17,7 +17,7 @@ KisanNama is a multi-agent AI system that helps Pakistani farmers make data-driv
 | Frontend | Next.js 16.2.9(latest) (App Router) | Farmer chat UI + Govt dashboard |
 | Backend | FastAPI (Python 3.11+) | API server, SSE streaming |
 | Agent framework | CrewAI | Multi-agent orchestration |
-| LLM | Fireworks AI (deepseek-v4-pro) | Agent reasoning, Urdu generation, synthesis |
+| LLM | Self-hosted vLLM — `google/gemma-4-31b-it` (AMD GPU) | Agent reasoning, Urdu generation, synthesis |
 | Database | PostgreSQL | Structured crop + user data |
 | Weather | ~~Open-Meteo API~~ | ~~Removed~~ |
 | STT | Web Speech API (browser) | Urdu voice input (ur-PK) |
@@ -81,7 +81,7 @@ KisanNama is a multi-agent AI system that helps Pakistani farmers make data-driv
         └────────────┴────────────┴──────────────┘
                               │
                               ▼
-                   Fireworks AI — deepseek-v4-pro (synthesis)
+                   Self-hosted vLLM — google/gemma-4-31b-it (AMD GPU)
                    Urdu recommendation
                    streamed back via SSE
 ```
@@ -237,14 +237,14 @@ CREATE TABLE query_log (
 
 ### Strategy Agent
 - **Input:** Risk Agent + Market Agent outputs
-- **Tools:** Fireworks API call (deepseek-v4-pro) with structured context
+- **Tools:** vLLM API call (`google/gemma-4-31b-it`) with structured context
 - **Output:** 2–3 alternative crop suggestions with reasoning
 
 ### Orchestrator
-- Runs Data, Risk, Market, Strategy agents in parallel via `Process.hierarchical`
-- All agents use `deepseek-v4-pro` as their LLM via CrewAI's `LLM` wrapper
+- Runs Data, Risk, Market, Strategy agents in sequential process
+- All agents use `google/gemma-4-31b-it` via the self-hosted vLLM server (OpenAI-compatible)
 - Merges results into a single context object
-- Makes final Fireworks streaming call (deepseek-v4-pro) to generate Urdu recommendation
+- Makes final vLLM streaming call to generate bilingual Urdu + English recommendation
 - Streams response chunks via SSE
 
 ---
@@ -298,7 +298,10 @@ data: {"type": "done"}
 
 ### Backend (.env)
 ```
-FIREWORKS_API_KEY=fw_...
+# vLLM self-hosted endpoint (no API key required)
+VLLM_BASE_URL=http://129.212.184.69:8000/v1
+VLLM_MODEL=google/gemma-4-31b-it
+
 DATABASE_URL=postgresql://user:pass@host:5432/kisannama
 SECRET_KEY=your-jwt-secret-key
 ALGORITHM=HS256
@@ -327,8 +330,8 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 
 1. `POST /auth/signup` + `POST /auth/login` — auth working
 2. `POST /query` returning hardcoded Urdu string — proves connection
-3. Strategy Agent calling Fireworks AI deepseek-v4-pro — proves AI works
-4. Add Data, Risk, Market agents in parallel
+3. Strategy Agent calling self-hosted Gemma 4 31B via vLLM — proves AI works
+4. Add Data, Risk, Market agents in sequential pipeline
 5. Seed DB with PBS potato/onion/wheat district data
 6. Wire SSE streaming to AgentLog.tsx in frontend
 7. Build govt dashboard (entries table + add form)

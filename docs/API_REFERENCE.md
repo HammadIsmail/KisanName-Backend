@@ -118,7 +118,7 @@ Authorization: Bearer <token>
 
 ### POST /query
 
-Accepts a farmer's Urdu question, runs all CrewAI agents (powered by deepseek-v4-pro via Fireworks AI), and streams back agent updates followed by the Urdu recommendation as Server-Sent Events.
+Accepts a farmer's Urdu question, runs all CrewAI agents (powered by `google/gemma-4-31b-it` via self-hosted vLLM on AMD GPU), and streams back agent updates followed by the bilingual Urdu + English recommendation as Server-Sent Events.
 
 **Headers**
 ```
@@ -137,7 +137,7 @@ Accept: text/event-stream
 }
 ```
 
-> `district`, `crop`, and `land_acres` are extracted automatically by deepseek-v4-pro if not provided. Sending them explicitly speeds up processing.
+> `district`, `crop`, and `land_acres` are extracted automatically by `google/gemma-4-31b-it` if not provided. Sending them explicitly speeds up processing.
 
 **Response** — `Content-Type: text/event-stream`
 
@@ -532,7 +532,7 @@ No auth required. Used by Railway for uptime monitoring.
 | 409 | Conflict (duplicate entry, phone already registered) |
 | 422 | Validation error (missing required field, wrong type) |
 | 500 | Internal server error |
-| 503 | Upstream service unavailable (Fireworks API, Microsoft TTS) |
+| 503 | Upstream service unavailable (vLLM server unreachable, Microsoft TTS) |
 
 ---
 

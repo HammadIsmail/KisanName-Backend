@@ -29,26 +29,30 @@ DISTRICTS = [
     ("Rahim Yar Khan", "Punjab"),
 ]
 
-CROPS = ["Potato", "Onion", "Wheat"]
+# Expanded list to give the AI strategy alternatives
+CROPS = ["Potato", "Onion", "Wheat", "Maize", "Sunflower", "Canola", "Sugarcane"]
 
-# PBS-inspired sample crop area data
-CROP_AREA_DATA = [
-    # (district_name, crop_name, season, area_acres, prev_year_acres, expected_yield, source)
-    ("Sahiwal", "Potato", "Rabi 2025-26", 5200, 3800, 180, "PBS field survey"),
-    ("Okara", "Potato", "Rabi 2025-26", 4800, 4200, 175, "Patwari report"),
-    ("Faisalabad", "Onion", "Rabi 2025-26", 3100, 2740, 120, "PBS field survey"),
-    ("Multan", "Onion", "Kharif 2025", 2800, 2600, 110, "District agriculture dept"),
-    ("Lahore", "Wheat", "Rabi 2025-26", 12000, 11500, 35, "PBS field survey"),
-    ("Gujranwala", "Wheat", "Rabi 2025-26", 18500, 17800, 38, "PBS field survey"),
-    ("Sheikhupura", "Potato", "Rabi 2025-26", 3200, 3100, 165, "Patwari report"),
-    ("Rahim Yar Khan", "Wheat", "Rabi 2025-26", 22000, 21000, 36, "PBS field survey"),
-]
+# 4 years of history (3 previous seasons + current season)
+SEASONS = ["Rabi 2022-23", "Rabi 2023-24", "Rabi 2024-25", "Rabi 2025-26"]
 
-# Price history base prices (PKR/maund)
 BASE_PRICES = {
     "Potato": 1200,
     "Onion": 800,
     "Wheat": 2200,
+    "Maize": 1500,
+    "Sunflower": 3500,
+    "Canola": 4000,
+    "Sugarcane": 300,
+}
+
+BASE_YIELDS = {
+    "Potato": 180,
+    "Onion": 120,
+    "Wheat": 35,
+    "Maize": 80,
+    "Sunflower": 20,
+    "Canola": 18,
+    "Sugarcane": 600,
 }
 
 
@@ -103,108 +107,126 @@ def seed():
             admin = existing_admin
             print("  ℹ Admin user already exists")
 
-        # ── Crop Area Data ─────────────────────────────────────────────────
-        for d_name, c_name, season, area, prev, yield_, source in CROP_AREA_DATA:
+        # ── Crop Area Data (4 Years, All crops, All districts) ─────────────
+        for d_name, province in DISTRICTS:
             d = district_map.get(d_name)
-            c = crop_map.get(c_name)
-            if not d or not c:
-                continue
-
-            existing = (
-                db.query(CropArea)
-                .filter(
-                    CropArea.district_id == d.id,
-                    CropArea.crop_id == c.id,
-                    CropArea.season == season,
-                )
-                .first()
-            )
-            if not existing:
-                entry = CropArea(
-                    district_id=d.id,
-                    crop_id=c.id,
-                    season=season,
-                    area_acres=area,
-                    prev_year_acres=prev,
-                    expected_yield=yield_,
-                    data_source=source,
-                    entered_by=admin.id,
-                )
-                db.add(entry)
-                print(f"  ✓ CropArea: {d_name}/{c_name}/{season}")
+            for c_name in CROPS:
+                c = crop_map.get(c_name)
+                
+                # Base area for this specific district/crop combo
+                base_area = random.randint(1000, 15000)
+                
+                prev_area = base_area
+                for season in SEASONS:
+                    # Randomize current area by -10% to +15% from prev year
+                    variation = random.uniform(-0.10, 0.15)
+                    area = int(prev_area * (1 + variation))
+                    
+                    expected_yield = int(BASE_YIELDS[c_name] * random.uniform(0.9, 1.1))
+                    
+                    existing = (
+                        db.query(CropArea)
+                        .filter(
+                            CropArea.district_id == d.id,
+                            CropArea.crop_id == c.id,
+                            CropArea.season == season,
+                        )
+                        .first()
+                    )
+                    
+                    if not existing:
+                        entry = CropArea(
+                            district_id=d.id,
+                            crop_id=c.id,
+                            season=season,
+                            area_acres=area,
+                            prev_year_acres=prev_area,
+                            expected_yield=expected_yield,
+                            data_source="PBS simulated data",
+                            entered_by=admin.id,
+                        )
+                        db.add(entry)
+                    
+                    prev_area = area # Next season's prev area is this season's area
+                
+                print(f"  ✓ CropArea: {d_name} - {c_name} (4 seasons)")
 
         db.commit()
 
-        # ── Price History (12 months per crop/district combo) ──────────────
+        # ── Price History (36 months per crop/district combo) ──────────────
         today = date.today()
-        for d_name, c_name, *_ in CROP_AREA_DATA:
+        for d_name, province in DISTRICTS:
             d = district_map.get(d_name)
-            c = crop_map.get(c_name)
-            if not d or not c:
-                continue
-
-            existing_count = (
-                db.query(PriceHistory)
-                .filter(PriceHistory.district_id == d.id, PriceHistory.crop_id == c.id)
-                .count()
-            )
-            if existing_count > 0:
-                continue
-
-            base = BASE_PRICES[c_name]
-            for i in range(12):
-                record_date = today - timedelta(days=30 * i)
-                # Slight random fluctuation ±15%
-                variation = random.uniform(-0.15, 0.15)
-                price = int(base * (1 + variation))
-                ph = PriceHistory(
-                    crop_id=c.id,
-                    district_id=d.id,
-                    price_pkr=price,
-                    recorded_at=record_date,
+            for c_name in CROPS:
+                c = crop_map.get(c_name)
+                
+                existing_count = (
+                    db.query(PriceHistory)
+                    .filter(PriceHistory.district_id == d.id, PriceHistory.crop_id == c.id)
+                    .count()
                 )
-                db.add(ph)
-            print(f"  ✓ PriceHistory: {d_name}/{c_name} (12 months)")
+                
+                # If existing count is less than 36, clear and re-seed
+                if existing_count < 36:
+                    db.query(PriceHistory).filter(PriceHistory.district_id == d.id, PriceHistory.crop_id == c.id).delete()
+                    
+                    base = BASE_PRICES[c_name]
+                    current_price = base
+                    for i in range(36):
+                        record_date = today - timedelta(days=30 * i)
+                        # Prices drift monthly
+                        variation = random.uniform(-0.05, 0.06)
+                        current_price = int(current_price * (1 + variation))
+                        
+                        ph = PriceHistory(
+                            crop_id=c.id,
+                            district_id=d.id,
+                            price_pkr=current_price,
+                            recorded_at=record_date,
+                        )
+                        db.add(ph)
+                    print(f"  ✓ PriceHistory: {d_name} - {c_name} (36 months)")
 
         db.commit()
 
         # ── Seasonal Weather (12 months per district) ──────────────────────
+        # Schema only supports month 1-12 (averages), not full historical weather
         for d_name, province in DISTRICTS:
             d = district_map.get(d_name)
-            if not d:
-                continue
             
             existing_count = (
                 db.query(SeasonalWeather)
                 .filter(SeasonalWeather.district_id == d.id)
                 .count()
             )
-            if existing_count > 0:
-                continue
+            
+            if existing_count != 12:
+                # Clear existing if misconfigured
+                db.query(SeasonalWeather).filter(SeasonalWeather.district_id == d.id).delete()
 
-            for month in range(1, 13):
-                # Fake data: hotter in summer (Jun-Aug), some rain in monsoon (Jul-Sep)
-                if 5 <= month <= 8:
-                    temp = random.uniform(30.0, 42.0)
-                else:
-                    temp = random.uniform(12.0, 28.0)
-                
-                if 7 <= month <= 9:
-                    rain = random.uniform(50.0, 200.0)
-                else:
-                    rain = random.uniform(0.0, 30.0)
-                
-                sw = SeasonalWeather(
-                    district_id=d.id,
-                    month=month,
-                    avg_temp_c=round(temp, 1),
-                    avg_rainfall_mm=round(rain, 1),
-                )
-                db.add(sw)
-            print(f"  ✓ SeasonalWeather: {d_name} (12 months)")
+                for month in range(1, 13):
+                    # Fake data: hotter in summer (Jun-Aug), some rain in monsoon (Jul-Sep)
+                    if 5 <= month <= 8:
+                        temp = random.uniform(30.0, 42.0)
+                    else:
+                        temp = random.uniform(12.0, 28.0)
+                    
+                    if 7 <= month <= 9:
+                        rain = random.uniform(50.0, 200.0)
+                    else:
+                        rain = random.uniform(0.0, 30.0)
+                    
+                    sw = SeasonalWeather(
+                        district_id=d.id,
+                        month=month,
+                        avg_temp_c=round(temp, 1),
+                        avg_rainfall_mm=round(rain, 1),
+                    )
+                    db.add(sw)
+                print(f"  ✓ SeasonalWeather: {d_name} (12 monthly averages)")
 
         db.commit()
-        print("\n✅ Seed complete!")
+        print("\n✅ Seed complete with comprehensive historical data!")
 
     except Exception as e:
         db.rollback()
@@ -215,5 +237,5 @@ def seed():
 
 
 if __name__ == "__main__":
-    print("🌱 Seeding KisanNama database...\n")
+    print("🌱 Seeding KisanNama database with comprehensive historical data...\n")
     seed()

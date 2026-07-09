@@ -2,8 +2,8 @@
 KisanNama CrewAI Orchestrator
 
 Flow:
-  1. Parse district/crop from query (Fireworks Gemma 4 26B)
-  2. Run CrewAI Crew (Data, Risk, Market, Strategy) hierarchically.
+  1. Parse district/crop from query (google/gemma-4-31b-it via self-hosted vLLM)
+  2. Run CrewAI Crew (Data, Risk, Market, Strategy) sequentially.
   3. Extract risk_level and recommended_crop from the output.
   4. Stream final recommendation via SSE in BOTH Urdu and English simultaneously
 """
@@ -13,7 +13,7 @@ import asyncio
 from typing import AsyncGenerator, Optional
 
 from dotenv import load_dotenv
-from openai import OpenAI        # Fireworks uses the same OpenAI SDK
+from openai import OpenAI        # vLLM exposes an OpenAI-compatible API
 from crewai import Agent, Task, Crew, Process, LLM
 from sqlalchemy.orm import Session
 
@@ -35,27 +35,23 @@ def patched_completion(*args, **kwargs):
 litellm.completion = patched_completion
 # -------------------------------------------
 
-# ─── Fireworks client (OpenAI-compatible) ─────────────────────────────────────
+# ─── Self-hosted vLLM client (OpenAI-compatible) ──────────────────────────────
 
-FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
-FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
+VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://129.212.184.69:8000/v1")
+VLLM_MODEL    = os.getenv("VLLM_MODEL",    "google/gemma-4-31b-it")
 
-# DeepSeek v4 Pro via Fireworks AI
-FIREWORKS_MODEL = "accounts/fireworks/models/deepseek-v4-pro"
-
-# OpenAI SDK pointed at Fireworks — used for parse_query, extract_fields, streaming
-_fw_client = OpenAI(
-    api_key=FIREWORKS_API_KEY,
-    base_url=FIREWORKS_BASE_URL,
+# OpenAI SDK pointed at vLLM — used for parse_query, extract_fields, streaming
+_vllm_client = OpenAI(
+    api_key="not-needed",   # vLLM doesn't require a key
+    base_url=VLLM_BASE_URL,
 )
 
-# CrewAI LLM object — used by all agents and the manager
-# Use "openai/" prefix + Fireworks base_url (OpenAI-compatible interface)
-# This avoids LiteLLM's fireworks_ai/ provider which requires FIREWORKS_AI_API_KEY env var
+# CrewAI LLM object — used by all agents
+# Use "openai/" prefix so LiteLLM routes through the OpenAI-compatible path
 _crew_llm = LLM(
-    model=f"openai/{FIREWORKS_MODEL}",
-    api_key=FIREWORKS_API_KEY,
-    base_url=FIREWORKS_BASE_URL,
+    model=f"openai/{VLLM_MODEL}",
+    api_key="not-needed",
+    base_url=VLLM_BASE_URL,
     temperature=0.2,        # low temp for reliable tool-calling
 )
 
@@ -87,8 +83,8 @@ def parse_query(text: str) -> dict:
         "If you cannot determine a value, use null. "
         "Do NOT include any explanation or markdown — output raw JSON only."
     )
-    response = _fw_client.chat.completions.create(
-        model=FIREWORKS_MODEL,
+    response = _vllm_client.chat.completions.create(
+        model=VLLM_MODEL,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": text},
@@ -242,14 +238,14 @@ async def run_query_stream(
     strategy_task.callback = make_cb("strategy_agent", "متبادل فصلیں تیار ہیں", "Strategy ready")
 
     kickoff_task = asyncio.create_task(asyncio.to_thread(crew.kickoff))
-    
+
     while not kickoff_task.done():
         try:
             event = await asyncio.wait_for(q.get(), timeout=0.5)
             yield event
         except asyncio.TimeoutError:
             continue
-            
+
     while not q.empty():
         yield q.get_nowait()
 
@@ -264,17 +260,22 @@ async def run_query_stream(
 
     def extract_fields():
         try:
-            res = _fw_client.chat.completions.create(
-                model=FIREWORKS_MODEL,
+            res = _vllm_client.chat.completions.create(
+                model=VLLM_MODEL,
                 messages=[
                     {"role": "system", "content": extract_sys},
                     {"role": "user", "content": merged_outputs},
                 ],
                 temperature=0,
                 max_tokens=128,
-                response_format={"type": "json_object"}
             )
             raw = res.choices[0].message.content.strip()
+            # Strip markdown fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
             return json.loads(raw)
         except Exception as e:
             print(f"Warning: Failed to extract fields: {e}")
@@ -311,8 +312,8 @@ STRICT INSTRUCTION: Reply ONLY in English. Do not use any Urdu words.
 
     # Stream Urdu tokens
     def stream_ur():
-        return _fw_client.chat.completions.create(
-            model=FIREWORKS_MODEL,
+        return _vllm_client.chat.completions.create(
+            model=VLLM_MODEL,
             messages=[{"role": "user", "content": ur_prompt}],
             stream=True,
             temperature=0.5,
@@ -327,8 +328,8 @@ STRICT INSTRUCTION: Reply ONLY in English. Do not use any Urdu words.
 
     # Stream English tokens
     def stream_en():
-        return _fw_client.chat.completions.create(
-            model=FIREWORKS_MODEL,
+        return _vllm_client.chat.completions.create(
+            model=VLLM_MODEL,
             messages=[{"role": "user", "content": en_prompt}],
             stream=True,
             temperature=0.5,

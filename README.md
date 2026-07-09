@@ -4,7 +4,7 @@
 
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green?logo=fastapi)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python)
-![Fireworks AI](https://img.shields.io/badge/Fireworks_AI-DeepSeek_V4_Pro-FF4500?logo=fire)
+![vLLM](https://img.shields.io/badge/vLLM-Gemma_4_31B-blueviolet?logo=google)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-blue?logo=postgresql)
 
 
@@ -13,7 +13,7 @@
 ## ✨ Features
 
 - 🤖 **4-agent AI pipeline** — Specialized CrewAI agents analyze crop area, compute planting risk, assess market price trends, and suggest alternative crops before generating the final advice.
-- 🌐 **Bilingual responses (Urdu + English)** — Every query generates a full response in **both** languages simultaneously using two parallel DeepSeek streams. Both are stored in the database; the frontend switches between them with zero re-fetching.
+- 🌐 **Bilingual responses (Urdu + English)** — Every query generates a full response in **both** languages simultaneously using two parallel Gemma streams via self-hosted vLLM. Both are stored in the database; the frontend switches between them with zero re-fetching.
 - ⚡ **Real-time SSE streaming** — Responses are streamed token-by-token via Server-Sent Events. All events (`agent_update`, `token`, `done`) carry bilingual content.
 - 💬 **Session-based chat history** — Conversations are grouped into `ChatSession` records. Each session holds multiple `QueryLog` messages. Fully queryable via REST.
 - 🔊 **Text-to-Speech (TTS)** — `edge-tts` (Microsoft Neural Voices) converts Urdu/English text to high-quality MP3 audio (up to 4,096 characters). Completely free and natively supports Urdu.
@@ -67,7 +67,7 @@ backend/
 
 - **Python** 3.9+
 - **PostgreSQL** database (local or hosted on [Neon](https://neon.tech/))
-- **Fireworks AI API Key** — For DeepSeek V4 Pro inference
+- **vLLM server** running `google/gemma-4-31b-it` — accessible at `http://129.212.184.69:8000` (no API key required)
 
 ---
 
@@ -87,7 +87,10 @@ pip install -r requirements.txt
 Create a `.env` file in the project root:
 
 ```env
-FIREWORKS_API_KEY=fw_...your-key-here...
+# Self-hosted vLLM endpoint (no API key required)
+VLLM_BASE_URL=http://129.212.184.69:8000/v1
+VLLM_MODEL=google/gemma-4-31b-it
+
 DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 SECRET_KEY=any-long-random-string-here
 ALGORITHM=HS256
@@ -96,7 +99,8 @@ ACCESS_TOKEN_EXPIRE_DAYS=7
 
 | Variable | Description |
 |---|---|
-| `FIREWORKS_API_KEY` | Your Fireworks AI API key (DeepSeek inference) |
+| `VLLM_BASE_URL` | Base URL of the self-hosted vLLM server (e.g. `http://129.212.184.69:8000/v1`) |
+| `VLLM_MODEL` | Model name to use — `google/gemma-4-31b-it` |
 | `DATABASE_URL` | Full PostgreSQL connection string |
 | `SECRET_KEY` | Random secret for signing JWT tokens |
 | `ALGORITHM` | JWT algorithm — use `HS256` |
@@ -143,11 +147,11 @@ User query (text + optional district/crop/session_id)
 1. Data Agent      → Fetches crop area & previous year area for the district
 2. Risk Agent      → Computes % YoY change → low / medium / high risk label
 3. Market Agent    → Retrieves latest price trend & last recorded price
-4. Strategy Agent  → DeepSeek V4 suggests 2-3 alternative crops (in both languages)
+4. Strategy Agent  → Gemma 4 31B suggests 2-3 alternative crops (in both languages)
         │
         ▼
-DeepSeek Stream → Urdu recommendation (tokens tagged lang="ur")
-DeepSeek Stream → English recommendation (tokens tagged lang="en")
+Gemma Stream → Urdu recommendation (tokens tagged lang="ur")
+Gemma Stream → English recommendation (tokens tagged lang="en")
         │
         ▼
 SSE "done" event → { risk_level, recommended_crop, district }
