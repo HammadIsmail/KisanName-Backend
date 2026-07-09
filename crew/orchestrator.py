@@ -189,6 +189,7 @@ async def run_query_stream(
         description=f"Fetch crop area summary for {crop} in {district}.",
         expected_output="A text summary of the crop area, including percentage change vs 3-year average.",
         agent=data_agent,
+        async_execution=True,
     )
 
     risk_task = Task(
@@ -202,6 +203,7 @@ async def run_query_stream(
         description=f"Fetch market trend summary for {crop} in {district}.",
         expected_output="A text summary of market trends including the trend direction.",
         agent=market_agent,
+        async_execution=True,
     )
 
     strategy_task = Task(
@@ -217,8 +219,7 @@ async def run_query_stream(
     crew = Crew(
         agents=[data_agent, risk_agent, market_agent, strategy_agent],
         tasks=[data_task, risk_task, market_task, strategy_task],
-        process=Process.hierarchical,
-        manager_llm=_crew_llm,
+        process=Process.sequential,
         verbose=True,
     )
 
