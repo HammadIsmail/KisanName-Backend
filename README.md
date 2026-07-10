@@ -226,7 +226,7 @@ python migrate.py
 
 ## 🤝 Related Repository
 
-- **Frontend**: [KisanName-Frontend](https://github.com/HammadIsmail/KisanNama-Frontend) — Next.js + TypeScript + Tailwind CSS
+- **Frontend**: [KisanNama-Frontend](https://github.com/HammadIsmail/KisanNama-Frontend) — Next.js + TypeScript + Tailwind CSS
 
 ---
 
