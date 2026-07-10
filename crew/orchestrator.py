@@ -103,6 +103,19 @@ def parse_query(text: str) -> dict:
 
     return json.loads(raw)
 
+GREETING_KEYWORDS = {
+    "السلام", "سلام", "hello", "hi", "hey", "آداب", "جی", "ہیلو",
+    "نمستے", "کیا حال", "good morning", "good evening", "assalam",
+    "ہائے", "السلام علیکم"
+}
+
+def is_greeting(text: str) -> bool:
+    """Return True if the query is a greeting or completely off-topic with no farming intent."""
+    lowered = text.lower().strip()
+    words = lowered.split()
+    if len(words) <= 8 and any(kw in lowered for kw in GREETING_KEYWORDS):
+        return True
+    return False
 
 # ─── Main orchestrator ────────────────────────────────────────────────────────
 
@@ -118,6 +131,58 @@ async def run_query_stream(
     ALL events contain BOTH Urdu and English content.
     """
     get_crop_area_summary, assess_risk, get_market_trend_summary = make_tools(db)
+
+    # ── Step 0: Check for greeting — stream via LLM for a natural, human feel ─
+    if is_greeting(query_text) and not district and not crop:
+        greeting_ur_prompt = (
+            "تم KisanNama کے AI زرعی مشیر ہو — ایک دوستانہ اور ہمدرد پاکستانی ماہر۔\n"
+            f"ایک کسان نے یہ کہا: \"{query_text}\"\n\n"
+            "ان کا پُرجوش، گرمجوشی سے اردو میں استقبال کرو۔ اپنا تعارف KisanNama کے مشیر کے طور پر کراؤ۔ "
+            "انہیں بتاؤ کہ تم آلو، پیاز اور گندم کی کاشت کے بارے میں ضلع کی سطح پر مشورہ دے سکتے ہو۔ "
+            "ان سے پوچھو کہ وہ کس ضلع میں کون سی فصل اگانا چاہتے ہیں۔ "
+            "صرف اردو میں لکھو، 60-80 الفاظ میں رکھو، قدرتی اور انسانی لہجہ استعمال کرو۔"
+        )
+        greeting_en_prompt = (
+            "You are the KisanNama AI Agricultural Advisor — a friendly, knowledgeable expert for Pakistani farmers.\n"
+            f"A farmer just said: \"{query_text}\"\n\n"
+            "Warmly welcome them, introduce yourself as KisanNama's advisor. "
+            "Let them know you can advise on potato, onion, and wheat cultivation at the district level. "
+            "Ask them which district they are in and which crop they are planning to grow. "
+            "Reply ONLY in English. Keep it to 60-80 words. Use a warm, natural, conversational tone."
+        )
+
+        def _stream_greeting_ur():
+            return _vllm_client.chat.completions.create(
+                model=VLLM_MODEL,
+                messages=[{"role": "user", "content": greeting_ur_prompt}],
+                stream=True,
+                temperature=0.8,
+                max_tokens=256,
+            )
+
+        def _stream_greeting_en():
+            return _vllm_client.chat.completions.create(
+                model=VLLM_MODEL,
+                messages=[{"role": "user", "content": greeting_en_prompt}],
+                stream=True,
+                temperature=0.8,
+                max_tokens=256,
+            )
+
+        ur_greeting_stream = await asyncio.to_thread(_stream_greeting_ur)
+        for chunk in ur_greeting_stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                yield _sse({"type": "token", "lang": "ur", "content": delta.content})
+
+        en_greeting_stream = await asyncio.to_thread(_stream_greeting_en)
+        for chunk in en_greeting_stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                yield _sse({"type": "token", "lang": "en", "content": delta.content})
+
+        yield _sse({"type": "done", "risk_level": "low", "recommended_crop": None, "district": None})
+        return
 
     # ── Step 1: Parse query if fields missing ───────────────────────────────
     if not district or not crop:
@@ -136,11 +201,19 @@ async def run_query_stream(
             return
 
     if not district or not crop:
-        yield _sse({
-            "type": "error",
-            "message_ur": "براہ کرم اپنے سوال میں ضلع اور فصل کا نام بتائیں۔",
-            "message_en": "Please specify the district and crop name in your query.",
-        })
+        if not district and not crop:
+            msg_ur = "معاف کیجئے گا، براہ کرم اپنے ضلع اور فصل کا نام بتائیں۔"
+            msg_en = "Please let me know your district and which crop you are planning to grow."
+        elif not district:
+            msg_ur = f"آپ {crop} کس ضلع میں کاشت کرنا چاہتے ہیں؟"
+            msg_en = f"Which district are you planning to plant {crop} in?"
+        else:
+            msg_ur = f"آپ {district} میں کون سی فصل کاشت کرنا چاہتے ہیں؟"
+            msg_en = f"Which crop are you planning to plant in {district}?"
+            
+        yield _sse({"type": "token", "lang": "ur", "content": msg_ur})
+        yield _sse({"type": "token", "lang": "en", "content": msg_en})
+        yield _sse({"type": "done", "risk_level": "low", "recommended_crop": None, "district": district})
         return
 
     # ── Step 2: Run CrewAI Agents ───────────────────────────────────────────
@@ -254,7 +327,10 @@ async def run_query_stream(
 
     # ── Step 3: Extract final fields for UI ──────────────────────────────────
     extract_sys = (
-        "Extract risk_level (low/medium/high) and recommended_crop (string) from the report. "
+        "You are reading an agricultural advisory report.\n"
+        "'recommended_crop' must be an ALTERNATIVE crop that is being suggested INSTEAD OF the crop being analyzed.\n"
+        "Do NOT return the crop under analysis as recommended_crop.\n"
+        "Extract: risk_level (low/medium/high) and recommended_crop (the suggested alternative, not the crop being studied).\n"
         "Return ONLY raw JSON — no markdown, no explanation."
     )
 
@@ -279,7 +355,13 @@ async def run_query_stream(
             return json.loads(raw)
         except Exception as e:
             print(f"Warning: Failed to extract fields: {e}")
-            return {"risk_level": "low", "recommended_crop": crop}
+            CROP_ALTERNATIVES = {
+                "potato": "Onion",
+                "onion": "Wheat",
+                "wheat": "Onion",
+            }
+            fallback_alt = CROP_ALTERNATIVES.get(str(crop).lower(), "Wheat") if crop else "Wheat"
+            return {"risk_level": "low", "recommended_crop": fallback_alt}
 
     extracted = await asyncio.to_thread(extract_fields)
     risk_level = extracted.get("risk_level", "low").lower()
