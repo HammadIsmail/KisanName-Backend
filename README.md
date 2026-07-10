@@ -86,6 +86,8 @@ pip install -r requirements.txt
 
 Create a `.env` file in the project root:
 
+> **Note:** We have hosted the Gemma model on an AMD developer account (AMD GPU on cloud). For anyone to clone this repo, you have to run Gemma on your own cloud and provide your URL and model name here in these environment variables.
+
 ```env
 # Self-hosted vLLM endpoint (no API key required)
 VLLM_BASE_URL=http://129.212.184.69:8000/v1
